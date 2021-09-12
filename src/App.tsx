@@ -27,7 +27,8 @@ const required = (value: string) => (value === '' ? 'Заполните поле
 
 const Footer = () => {
   const form = useForm()
-  const { submitting } = useFormState()
+  const { submitting } = useFormState({ subscription: { submitting: true } })
+  console.log('render', submitting)
 
   return (
     <div>

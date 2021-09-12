@@ -8,6 +8,7 @@ import {
   FieldState,
   FieldValidator,
 } from './form'
+import { createAtom } from '@reatom/core'
 
 type FieldInputProps<FieldValue> = {
   name: string
@@ -44,10 +45,34 @@ export const useForm = () => {
     },
   }
 }
+export interface FormSubscription {
+  subscription?: {
+    submitting?: boolean
+    initialValues?: boolean
+    invalid?: boolean
+    pristine?: boolean
+    touched?: boolean
+    valid?: boolean
+    validating?: boolean
+    values?: boolean
+  }
+}
 
-export const useFormState = () => {
+export const useFormState = (config?: FormSubscription) => {
   const form = useContext(Context)
-  return useAtom(form)[0]
+  const [memo] = React.useState(() =>
+    createAtom({ form }, ({ get }) => {
+      const state = get('form')
+      if (!config?.subscription) {
+        return state
+      }
+      return Object.fromEntries(
+        // @ts-ignore
+        Object.entries(state).filter(([name]) => config.subscription[name]),
+      )
+    }),
+  )
+  return useAtom(memo)[0]
 }
 
 // const getFieldByName = (name: string) => {
