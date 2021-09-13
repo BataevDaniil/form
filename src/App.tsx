@@ -57,6 +57,7 @@ function App() {
         <Field name="field1" validate={required} component={Input} />
         <Field
           name="field2"
+          subscription={{ value: true }}
           validate={(value) => delay(2000).then(() => required(value))}
           component={Input}
         />
@@ -70,7 +71,12 @@ function App() {
         }}
         initialValues={{ field2: 'asdf' }}
       >
-        <Field name="field1" validate={required} component={Input} />
+        <Field
+          name="field1"
+          subscription={{ value: true }}
+          validate={required}
+          component={Input}
+        />
         <Field
           name="field2"
           validate={(value) => delay(2000).then(() => required(value))}

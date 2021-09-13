@@ -12,9 +12,9 @@ import { createAtom } from '@reatom/core'
 
 type FieldInputProps<FieldValue> = {
   name: string
-  onBlur: (event?: React.FocusEvent<HTMLElement>) => void
-  onChange: (event: React.ChangeEvent<HTMLElement> | any) => void
-  onFocus: (event?: React.FocusEvent<HTMLElement>) => void
+  onBlur: () => void
+  onChange: (value: any) => void
+  onFocus: () => void
   value: FieldValue
   // type?: string
   // checked?: boolean
@@ -75,29 +75,18 @@ export const useFormState = (config?: FormSubscription) => {
   return useAtom(memo)[0]
 }
 
-// const getFieldByName = (name: string) => {
-//   createAtom({ form }, ({ get }) => {
-//     const field = get('form').fields[name]
-//     return {
-//       input: {
-//         value: field.value,
-//         name,
-//         onBlur: () => form.blur.dispatch(name),
-//         onFocus: () => form.focus.dispatch(name),
-//         onChange: (value: any) => form.change.dispatch(name, value),
-//       },
-//       meta: {
-//         error: field.error,
-//         validating: field.validating,
-//         touched: field.touched,
-//       },
-//     }
-//   })
-// }
+export interface FieldSubscription {
+  subscription?: {
+    error?: boolean
+    touched?: boolean
+    validating?: boolean
+    value?: boolean
+  }
+}
 
 export const useField = (
   name: string,
-  config?: FieldConfig,
+  config?: FieldConfig & FieldSubscription,
 ): FieldRenderProps<any> => {
   const form = useContext(Context)
   // @ts-ignore
@@ -113,6 +102,8 @@ export const useField = (
   // @ts-ignore
   const field = state.fields[name]
 
+  // TODO: add
+  // config?.subscription
   return {
     input: {
       value: field.value,
@@ -153,11 +144,15 @@ export const Form: React.FC<CreateFormParams & { debug?: boolean }> = ({
   return <Context.Provider value={form}>{children}</Context.Provider>
 }
 
-export const Field: React.FC<FieldProps> = ({
+export const Field: React.FC<FieldProps & FieldSubscription> = ({
   name,
   component: Component,
+  subscription,
   ...props
 }) => {
-  const field = useField(name, { validate: props.validate ?? null })
+  const field = useField(name, {
+    validate: props.validate ?? null,
+    subscription,
+  })
   return <Component {...field} {...props} />
 }
