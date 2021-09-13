@@ -7,6 +7,7 @@ import {
   FieldConfig,
   FieldState,
   FieldValidator,
+  FormState,
 } from './form'
 import { createAtom } from '@reatom/core'
 
@@ -16,9 +17,6 @@ type FieldInputProps<FieldValue> = {
   onChange: (value: any) => void
   onFocus: () => void
   value: FieldValue
-  // type?: string
-  // checked?: boolean
-  // multiple?: boolean
 }
 type FieldMetaState<FieldValue> = Pick<
   FieldState<FieldValue>,
@@ -28,21 +26,26 @@ type FieldMetaState<FieldValue> = Pick<
 export type FieldRenderProps<FieldValue> = {
   input: FieldInputProps<FieldValue>
   meta: FieldMetaState<FieldValue>
+  [otherProp: string]: any
 }
 
+const mapStoreToFormState = (state: FormState<any, any>) => {
+  return {
+    initialValues: state.initialValues,
+    valid: state.valid,
+    invalid: state.invalid,
+    values: state.values,
+    pristine: state.pristine,
+    submitting: state.submitting,
+    validating: state.validating,
+  }
+}
 export const useForm = () => {
   const form = useContext(Context)
   return {
     // TODO: need return submit promise
     submit: () => form.submit.dispatch(),
-    getState: () => {
-      const state = form.getState()
-      return {
-        pristine: state.pristine,
-        submitting: state.submitting,
-        validating: state.validating,
-      }
-    },
+    getState: (): FormState<any, any> => mapStoreToFormState(form.getState()),
   }
 }
 export interface FormSubscription {
@@ -58,13 +61,15 @@ export interface FormSubscription {
   }
 }
 
-export const useFormState = (config?: FormSubscription) => {
+export const useFormState = (
+  config?: FormSubscription,
+): Partial<FormState<any, any>> => {
   const form = useContext(Context)
   const [memo] = React.useState(() =>
     createAtom({ form }, ({ get }) => {
       const state = get('form')
       if (!config?.subscription) {
-        return state
+        return mapStoreToFormState(state)
       }
       return Object.fromEntries(
         // @ts-ignore
@@ -104,6 +109,7 @@ export const useField = (
 
   // TODO: add
   // config?.subscription
+  // TODO: add selectors
   return {
     input: {
       value: field.value,
@@ -129,13 +135,23 @@ export const Context = React.createContext(
   createForm({ onSubmit: () => {}, initialValues: {} }),
 )
 
-export const Form: React.FC<CreateFormParams & { debug?: boolean }> = ({
+export const Form: React.FC<
+  CreateFormParams & { debug?: boolean; createForm?: typeof createForm }
+> = ({
   onSubmit,
   initialValues,
   children,
+  createForm: createFormCertain = createForm,
   debug = false,
 }) => {
-  const [form] = React.useState(() => createForm({ onSubmit, initialValues }))
+  const submitMemo = React.useRef(onSubmit)
+  submitMemo.current = onSubmit
+  const [form] = React.useState(() =>
+    createFormCertain({
+      onSubmit: (values: object) => submitMemo.current(values),
+      initialValues,
+    }),
+  )
   React.useEffect(() => {
     if (debug) {
       return form.subscribe(console.log)
@@ -148,10 +164,11 @@ export const Field: React.FC<FieldProps & FieldSubscription> = ({
   name,
   component: Component,
   subscription,
+  validate,
   ...props
 }) => {
   const field = useField(name, {
-    validate: props.validate ?? null,
+    validate: validate ?? null,
     subscription,
   })
   return <Component {...field} {...props} />

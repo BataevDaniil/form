@@ -9,6 +9,7 @@ export type FieldValidator<FieldValue> = (
 
 export type FieldConfig = {
   validate: FieldValidator<any> | null
+  // possible add here subscriptions
 }
 export type FieldState<FieldValue> = {
   name: string
