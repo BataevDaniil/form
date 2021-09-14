@@ -1,6 +1,8 @@
 import React, { useContext } from 'react'
 import { useAtom } from '@reatom/react'
 
+import { memo } from './memo'
+
 import {
   createForm,
   CreateFormParams,
@@ -10,6 +12,8 @@ import {
   FormState,
 } from './form'
 import { createAtom } from '@reatom/core'
+// @ts-ignore
+import deepEqual from 'deep-equal'
 
 type FieldInputProps<FieldValue> = {
   name: string
@@ -65,19 +69,25 @@ export const useFormState = (
   config?: FormSubscription,
 ): Partial<FormState<any, any>> => {
   const form = useContext(Context)
-  const [memo] = React.useState(() =>
-    createAtom({ form }, ({ get }) => {
-      const state = get('form')
-      if (!config?.subscription) {
-        return mapStoreToFormState(state)
-      }
-      return Object.fromEntries(
-        // @ts-ignore
-        Object.entries(state).filter(([name]) => config.subscription[name]),
-      )
-    }),
+  const formState = React.useMemo(
+    () =>
+      createAtom(
+        { form },
+        ({ get }) => {
+          const state = get('form')
+          if (!config?.subscription) {
+            return mapStoreToFormState(state)
+          }
+          return Object.fromEntries(
+            // @ts-ignore
+            Object.entries(state).filter(([name]) => config.subscription[name]),
+          )
+        },
+        { decorators: [memo()] },
+      ),
+    [form],
   )
-  return useAtom(memo)[0]
+  return useAtom(formState)[0]
 }
 
 export interface FieldSubscription {
@@ -102,28 +112,58 @@ export const useField = (
     }
   }
   // @ts-ignore
-  const [state, actions] = useAtom(form)
+  const newAtom = React.useMemo(() => {
+    return createAtom(
+      {
+        form,
+        onBlur: () => {},
+        onChange: (value: any) => value,
+        onFocus: () => {},
+      },
+      ({ get, onAction, schedule }) => {
+        const field = get('form').fields[name]
+        onAction('onBlur', () =>
+          schedule((dispatch) => dispatch(form.blur(name))),
+        )
+        onAction('onFocus', () =>
+          schedule((dispatch) => dispatch(form.focus(name))),
+        )
+        onAction('onChange', (value) =>
+          schedule((dispatch) => dispatch(form.change(name, value))),
+        )
+        const tmp = {
+          input: {
+            value: field.value,
+            name,
+          },
+          meta: {
+            error: field.error,
+            validating: field.validating,
+            touched: field.touched,
+          },
+        }
+        // if (config?.subscription) {
+        // }
 
-  // @ts-ignore
-  const field = state.fields[name]
+        return tmp
+      },
+      { decorators: [memo(deepEqual)] },
+    )
+  }, [form, name])
 
-  // TODO: add
-  // config?.subscription
-  // TODO: add selectors
-  return {
-    input: {
-      value: field.value,
-      name,
-      onBlur: () => actions.blur(name),
-      onFocus: () => actions.focus(name),
-      onChange: (value: any) => actions.change(name, value),
-    },
-    meta: {
-      error: field.error,
-      validating: field.validating,
-      touched: field.touched,
-    },
-  }
+  const [state, actions] = useAtom(newAtom)
+  return React.useMemo(
+    () => ({
+      ...state,
+      input: {
+        ...state.input,
+        onBlur: actions.onBlur,
+        onFocus: actions.onFocus,
+        onChange: actions.onChange,
+      },
+    }),
+    [state, actions],
+  )
 }
 
 export type FieldProps = {
