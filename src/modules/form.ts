@@ -83,6 +83,18 @@ export const createForm = ({ onSubmit, initialValues }: CreateFormParams) => {
       const values = Object.fromEntries(
         Object.values(newState.fields).map(({ name, value }) => [name, value]),
       )
+      const mergeFieldByName = (
+        name: string,
+        patch: Partial<FieldState<any> & FieldConfig>,
+      ) => {
+        if (newState === state) {
+          newState = { ...state }
+        }
+        if (newState.fields === state.fields) {
+          newState.fields = { ...state.fields }
+        }
+        newState.fields[name] = { ...newState.fields[name], ...patch }
+      }
       const executeValidate = (
         name: string,
         validate: FieldValidator<any> | undefined,
@@ -145,49 +157,30 @@ export const createForm = ({ onSubmit, initialValues }: CreateFormParams) => {
         })
       })
       onAction(`reset`, (name) => {
-        newState = {
-          ...newState,
+        mergeFieldByName(name, {
+          ...field,
+          name,
           // @ts-ignore
-          fields: {
-            ...newState.fields,
-            // @ts-ignore
-            [name]: { ...field, name, value: newState.initialValues?.[name] },
-          },
-        }
+          value: newState.initialValues?.[name],
+        })
       })
       onAction(`setConfig`, ({ name, config }) => {
         if (config.validate) {
           // @ts-ignore
           executeValidate(name, config.validate, newState.fields[name].value)
         }
-        newState = {
-          ...newState,
-          fields: {
-            ...newState.fields,
-            // @ts-ignore
-            [name]: { ...newState.fields[name], ...config },
-          },
-        }
+        mergeFieldByName(name, config)
       })
       onAction(`addField`, (name) => {
-        newState = {
-          ...newState,
-          fields: {
-            ...newState.fields,
-            // @ts-ignore
-            [name]: { ...field, name, value: newState.initialValues?.[name] },
-          },
-        }
+        mergeFieldByName(name, {
+          ...field,
+          name,
+          // @ts-ignore
+          value: newState.initialValues?.[name],
+        })
       })
       onAction('_mergeField', ({ name, newField }) => {
-        newState = {
-          ...newState,
-          fields: {
-            ...newState.fields,
-            // @ts-ignore
-            [name]: { ...newState.fields[name], ...newField },
-          },
-        }
+        mergeFieldByName(name, newField)
       })
       onAction('_mergeForm', (newForm) => {
         newState = {
@@ -196,26 +189,12 @@ export const createForm = ({ onSubmit, initialValues }: CreateFormParams) => {
         }
       })
       onAction('blur', (name) => {
-        newState = {
-          ...newState,
-          fields: {
-            ...newState.fields,
-            // @ts-ignore
-            [name]: { ...newState.fields[name], touched: true },
-          },
-        }
+        mergeFieldByName(name, { touched: true })
       })
       onAction('change', ({ name, value }) => {
         // @ts-ignore
         executeValidate(name, newState.fields[name].validate, value)
-        newState = {
-          ...newState,
-          // @ts-ignore
-          fields: {
-            ...newState.fields,
-            [name]: { ...newState.fields[name], value },
-          },
-        }
+        mergeFieldByName(name, { value })
       })
 
       const invalid = Object.values(newState.fields).some(({ error }) => error)
