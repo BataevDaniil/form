@@ -99,6 +99,22 @@ export interface FieldSubscription {
   }
 }
 
+// @ts-ignore
+const mapFormToField = (form, name: string) => {
+  const field = form.fields[name]
+  return {
+    input: {
+      value: field.value,
+      name,
+    },
+    meta: {
+      error: field.error,
+      validating: field.validating,
+      touched: field.touched,
+    },
+  }
+}
+
 export const useField = (
   name: string,
   config?: FieldConfig & FieldSubscription,
@@ -120,8 +136,11 @@ export const useField = (
         onChange: (value: any) => value,
         onFocus: () => {},
       },
-      ({ get, onAction, schedule }) => {
-        const field = get('form').fields[name]
+      // @ts-ignore
+      (
+        { onAction, onChange, schedule, get },
+        state = mapFormToField(get('form'), name),
+      ) => {
         onAction('onBlur', () =>
           schedule((dispatch) => dispatch(form.blur(name))),
         )
@@ -131,21 +150,21 @@ export const useField = (
         onAction('onChange', (value) =>
           schedule((dispatch) => dispatch(form.change(name, value))),
         )
-        const tmp = {
-          input: {
-            value: field.value,
-            name,
-          },
-          meta: {
-            error: field.error,
-            validating: field.validating,
-            touched: field.touched,
-          },
-        }
-        // if (config?.subscription) {
-        // }
+        onChange('form', (newState, oldState) => {
+          if (
+            oldState === undefined ||
+            !config?.subscription ||
+            Object.keys(config.subscription).some(
+              (prop) =>
+                //@ts-ignore
+                newState.fields[name][prop] !== oldState.fields[name][prop],
+            )
+          ) {
+            state = mapFormToField(newState, name)
+          }
+        })
 
-        return tmp
+        return state
       },
       { decorators: [memo(deepEqual)] },
     )
