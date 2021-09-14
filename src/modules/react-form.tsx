@@ -1,5 +1,5 @@
 import React, { useContext } from 'react'
-import { useAtom } from '@reatom/react'
+import { useAction, useAtom } from '@reatom/react'
 
 import { memo } from './memo'
 
@@ -127,29 +127,20 @@ export const useField = (
       form.setConfig.dispatch(name, config)
     }
   }
+  const onBlur = useAction(() => form.blur(name), [name])
+  const onFocus = useAction(() => form.focus(name), [name])
+  const onChange = useAction((value: any) => form.change(name, value), [name])
   // @ts-ignore
   const newAtom = React.useMemo(() => {
     return createAtom(
       {
         form,
-        onBlur: () => {},
-        onChange: (value: any) => value,
-        onFocus: () => {},
       },
       // @ts-ignore
       (
         { onAction, onChange, schedule, get },
         state = mapFormToField(get('form'), name),
       ) => {
-        onAction('onBlur', () =>
-          schedule((dispatch) => dispatch(form.blur(name))),
-        )
-        onAction('onFocus', () =>
-          schedule((dispatch) => dispatch(form.focus(name))),
-        )
-        onAction('onChange', (value) =>
-          schedule((dispatch) => dispatch(form.change(name, value))),
-        )
         onChange('form', (newState, oldState) => {
           if (
             oldState === undefined ||
@@ -170,18 +161,18 @@ export const useField = (
     )
   }, [form, name])
 
-  const [state, actions] = useAtom(newAtom)
+  const [state] = useAtom(newAtom)
   return React.useMemo(
     () => ({
       ...state,
       input: {
         ...state.input,
-        onBlur: actions.onBlur,
-        onFocus: actions.onFocus,
-        onChange: actions.onChange,
+        onBlur,
+        onFocus,
+        onChange,
       },
     }),
-    [state, actions],
+    [state, onChange, onFocus, onFocus],
   )
 }
 
