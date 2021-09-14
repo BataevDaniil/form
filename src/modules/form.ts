@@ -63,8 +63,9 @@ export const createForm = ({ onSubmit, initialValues }: CreateFormParams) => {
   const initial = { ...formInitial, submit: onSubmit, initialValues }
   return createAtom(
     {
-      submit: () => {},
+      submit: (callback: () => void) => callback,
       blur: (name: string) => name,
+      reset: (name: string) => name,
       focus: (name: string) => name,
       change: (name: string, value: string) => ({ name, value }),
       addField: (name: string) => name,
@@ -112,7 +113,7 @@ export const createForm = ({ onSubmit, initialValues }: CreateFormParams) => {
           }
         })
       }
-      onAction(`submit`, () => {
+      onAction(`submit`, (callback) => {
         schedule(async (dispatch) => {
           const actions = [
             create('_mergeForm', {
@@ -139,8 +140,20 @@ export const createForm = ({ onSubmit, initialValues }: CreateFormParams) => {
             await newState.submit(values)
           } finally {
             dispatch(actions)
+            callback()
           }
         })
+      })
+      onAction(`reset`, (name) => {
+        newState = {
+          ...newState,
+          // @ts-ignore
+          fields: {
+            ...newState.fields,
+            // @ts-ignore
+            [name]: { ...field, name, value: newState.initialValues?.[name] },
+          },
+        }
       })
       onAction(`setConfig`, ({ name, config }) => {
         if (config.validate) {

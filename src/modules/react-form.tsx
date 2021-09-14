@@ -46,11 +46,19 @@ const mapStoreToFormState = (state: FormState<any, any>) => {
 }
 export const useForm = () => {
   const form = useContext(Context)
-  return {
-    // TODO: need return submit promise
-    submit: () => form.submit.dispatch(),
-    getState: (): FormState<any, any> => mapStoreToFormState(form.getState()),
-  }
+  return React.useMemo(
+    () => ({
+      submit: () =>
+        new Promise<undefined>((resolve) =>
+          form.submit.dispatch(() => resolve(undefined)),
+        ),
+      getState: (): FormState<any, any> => mapStoreToFormState(form.getState()),
+      change: form.change.dispatch,
+      resetFieldState: (name: string) => form.reset.dispatch(name),
+      getFieldState: (name: string) => mapFormToField(form.getState(), name),
+    }),
+    [form],
+  )
 }
 export interface FormSubscription {
   subscription?: {
