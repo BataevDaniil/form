@@ -1,5 +1,7 @@
-import React, { useContext } from 'react'
+import React, { ReactElement, ReactNode, useContext } from 'react'
 import { useAction, useAtom } from '@reatom/react'
+import { createAtom } from '@reatom/core'
+import deepEqual from 'deep-equal'
 
 import { memo } from './memo'
 
@@ -7,25 +9,19 @@ import {
   createForm,
   CreateFormParams,
   FieldConfig,
-  FieldState,
+  FieldMetaState,
   FieldValidator,
   FormState,
+  mapFieldToMeta,
 } from './form'
-import { createAtom } from '@reatom/core'
-// @ts-ignore
-import deepEqual from 'deep-equal'
 
-type FieldInputProps<FieldValue> = {
+export type FieldInputProps<FieldValue> = {
   name: string
   onBlur: () => void
   onChange: (value: any) => void
   onFocus: () => void
   value: FieldValue
 }
-type FieldMetaState<FieldValue> = Pick<
-  FieldState<FieldValue>,
-  Exclude<keyof FieldState<FieldValue>, 'name' | 'value'>
->
 
 export type FieldRenderProps<FieldValue> = {
   input: FieldInputProps<FieldValue>
@@ -75,21 +71,27 @@ export interface FormSubscription {
 
 export const useFormState = (
   config?: FormSubscription,
-): Partial<FormState<any, any>> => {
+): FormState<any, any> => {
   const form = useContext(Context)
   const formState = React.useMemo(
     () =>
       createAtom(
         { form },
-        ({ get }) => {
-          const state = get('form')
-          if (!config?.subscription) {
-            return mapStoreToFormState(state)
-          }
-          return Object.fromEntries(
-            // @ts-ignore
-            Object.entries(state).filter(([name]) => config.subscription[name]),
-          )
+        ({ onChange, get }, state = mapStoreToFormState(get('form'))) => {
+          onChange('form', (newState, oldState) => {
+            if (
+              oldState === undefined ||
+              !config?.subscription ||
+              Object.keys(config.subscription).some(
+                (prop) =>
+                  //@ts-ignore
+                  newState[prop] !== oldState[prop],
+              )
+            ) {
+              state = mapStoreToFormState(newState)
+            }
+          })
+          return state
         },
         { decorators: [memo()] },
       ),
@@ -115,11 +117,7 @@ const mapFormToField = (form, name: string) => {
       value: field.value,
       name,
     },
-    meta: {
-      error: field.error,
-      validating: field.validating,
-      touched: field.touched,
-    },
+    meta: mapFieldToMeta(field),
   }
 }
 
@@ -145,10 +143,7 @@ export const useField = (
         form,
       },
       // @ts-ignore
-      (
-        { onAction, onChange, schedule, get },
-        state = mapFormToField(get('form'), name),
-      ) => {
+      ({ onChange, get }, state = mapFormToField(get('form'), name)) => {
         onChange('form', (newState, oldState) => {
           if (
             oldState === undefined ||
@@ -184,23 +179,29 @@ export const useField = (
   )
 }
 
-export type FieldProps = {
-  component: React.FC<FieldRenderProps<any>>
-  name: string
-} & { validate?: FieldValidator<any> }
-
 export const Context = React.createContext(
   createForm({ onSubmit: () => {}, initialValues: {} }),
 )
 
-export const Form: React.FC<
-  CreateFormParams & { debug?: boolean; createForm?: typeof createForm }
+export const Form: React.VFC<
+  CreateFormParams &
+    FormSubscription & {
+      debug?: boolean
+      createForm?: typeof createForm
+      component?: React.FC
+      children: (
+        formState: FormState<any> & { form: ReturnType<typeof useForm> },
+      ) => ReactElement
+    }
 > = ({
   onSubmit,
   initialValues,
   children,
   createForm: createFormCertain = createForm,
+  component: Component,
+  subscription,
   debug = false,
+  ...props
 }) => {
   const submitMemo = React.useRef(onSubmit)
   submitMemo.current = onSubmit
@@ -215,19 +216,59 @@ export const Form: React.FC<
       return form.subscribe(console.log)
     }
   }, [debug, form])
-  return <Context.Provider value={form}>{children}</Context.Provider>
+  let render = null
+  if (Component) {
+    render = <Component {...props} />
+  } else if (typeof children === 'function') {
+    // @ts-ignore
+    render = (
+      <RenderChildren subscription={subscription}>{children}</RenderChildren>
+    )
+  }
+  return <Context.Provider value={form}>{render}</Context.Provider>
 }
 
-export const Field: React.FC<FieldProps & FieldSubscription> = ({
+const RenderChildren = ({
+  children,
+  subscription,
+}: FormSubscription & { children: (value: any) => Element }): Element => {
+  const formState = useFormState({ subscription })
+  const form = useForm()
+  const props = React.useMemo(() => ({ ...formState, form }), [formState, form])
+  return children(props) ?? null
+}
+
+export type FieldProps<T> = {
+  component?: React.FC<FieldRenderProps<T>>
+  name: string
+  children?:
+    | ReactNode
+    | ((fieldState: FieldRenderProps<T>) => ReactElement<any, any> | null)
+  validate?: FieldValidator<T>
+  [key: string]: any
+}
+
+export const Field = function Field<T>({
   name,
   component: Component,
   subscription,
   validate,
+  children,
   ...props
-}) => {
+}: FieldProps<T> & FieldSubscription) {
   const field = useField(name, {
     validate: validate ?? null,
     subscription,
   })
-  return <Component {...field} {...props} />
+  let render = null
+  if (Component) {
+    render = (
+      <Component {...field} {...props}>
+        {children}
+      </Component>
+    )
+  } else if (typeof children === 'function') {
+    render = children(field)
+  }
+  return render
 }

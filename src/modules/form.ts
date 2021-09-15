@@ -2,9 +2,8 @@ import { createAtom } from '@reatom/core'
 
 export type FieldValidator<FieldValue> = (
   value: FieldValue,
-  // TODO: add
-  // allValues: object,
-  // meta?: FieldState<FieldValue>,
+  allValues: object,
+  meta?: FieldState<FieldValue>,
 ) => any | Promise<any>
 
 export type FieldConfig = {
@@ -31,7 +30,7 @@ export type FormState<FormValues, InitialFormValues = Partial<FormValues>> = {
 
 type SubmissionErrors = Record<string, any> | undefined
 export type FormConfig<
-  FormValues = object,
+  FormValues = any,
   InitialFormValues = Partial<FormValues>,
 > = {
   initialValues?: InitialFormValues
@@ -58,16 +57,28 @@ export type CreateFormParams = {
   onSubmit: FormConfig['submit']
   initialValues: FormConfig['initialValues']
 }
+export type FieldMetaState<FieldValue> = Pick<
+  FieldState<FieldValue>,
+  Exclude<keyof FieldState<FieldValue>, 'name' | 'value'>
+>
+
+// @ts-ignore
+export const mapFieldToMeta = (currentField) => ({
+  error: currentField.error,
+  validating: currentField.validating,
+  touched: currentField.touched,
+})
 
 export const createForm = ({ onSubmit, initialValues }: CreateFormParams) => {
   const initial = { ...formInitial, submit: onSubmit, initialValues }
   return createAtom(
     {
       submit: (callback: () => void) => callback,
+      initialize: (values: object) => values,
       blur: (name: string) => name,
       reset: (name: string) => name,
       focus: (name: string) => name,
-      change: (name: string, value: string) => ({ name, value }),
+      change: (name: string, value: any) => ({ name, value }),
       addField: (name: string) => name,
       setConfig: (name: string, config: FieldConfig) => ({ name, config }),
       setConfigForm: (name: string, config: FormConfig) => ({ name, config }),
@@ -80,9 +91,17 @@ export const createForm = ({ onSubmit, initialValues }: CreateFormParams) => {
     ({ onAction, schedule, create }, state = initial) => {
       let newState = state
 
-      const values = Object.fromEntries(
-        Object.values(newState.fields).map(({ name, value }) => [name, value]),
-      )
+      const getInvalid = () =>
+        Object.values(newState.fields).some(({ error }) => error)
+      const getValues = () =>
+        Object.fromEntries(
+          Object.values(newState.fields).map(({ name, value }) => [
+            name,
+            value,
+          ]),
+        )
+      //TODO: add merge all field
+
       const mergeFieldByName = (
         name: string,
         patch: Partial<FieldState<any> & FieldConfig>,
@@ -95,29 +114,31 @@ export const createForm = ({ onSubmit, initialValues }: CreateFormParams) => {
         }
         newState.fields[name] = { ...newState.fields[name], ...patch }
       }
-      const executeValidate = (
-        name: string,
-        validate: FieldValidator<any> | undefined,
-        value: any,
-      ) => {
+      const executeValidate = (name: string) => {
+        const currentField = newState.fields[name]
+        const validate = currentField.validate
         if (!validate) {
           return
         }
         schedule(async (dispatch) => {
           const actions = [
-            create('_mergeField', name, {
+            create('_mergeField', currentField.name, {
               validating: false,
             }),
           ]
           try {
             dispatch(
-              create('_mergeField', name, {
+              create('_mergeField', currentField.name, {
                 validating: true,
               }),
             )
             actions.push(
-              create('_mergeField', name, {
-                error: await validate(value),
+              create('_mergeField', currentField.name, {
+                error: await validate(currentField.value, newState.values, {
+                  ...mapFieldToMeta(currentField),
+                  value: currentField.value,
+                  name: currentField.name,
+                }),
               }),
             )
           } finally {
@@ -125,7 +146,14 @@ export const createForm = ({ onSubmit, initialValues }: CreateFormParams) => {
           }
         })
       }
+      onAction('change', ({ name, value }) => {
+        console.log('change')
+        mergeFieldByName(name, { value })
+        executeValidate(name)
+      })
+
       onAction(`submit`, (callback) => {
+        console.log('submit')
         schedule(async (dispatch) => {
           const actions = [
             create('_mergeForm', {
@@ -148,8 +176,9 @@ export const createForm = ({ onSubmit, initialValues }: CreateFormParams) => {
                 ),
               }),
             )
-
-            await newState.submit(values)
+            if (!getInvalid()) {
+              await newState.submit(getValues())
+            }
           } finally {
             dispatch(actions)
             callback()
@@ -165,11 +194,10 @@ export const createForm = ({ onSubmit, initialValues }: CreateFormParams) => {
         })
       })
       onAction(`setConfig`, ({ name, config }) => {
-        if (config.validate) {
-          // @ts-ignore
-          executeValidate(name, config.validate, newState.fields[name].value)
-        }
         mergeFieldByName(name, config)
+        if (config.validate) {
+          executeValidate(name)
+        }
       })
       onAction(`addField`, (name) => {
         mergeFieldByName(name, {
@@ -188,24 +216,33 @@ export const createForm = ({ onSubmit, initialValues }: CreateFormParams) => {
           ...newForm,
         }
       })
+      onAction('initialize', (init) => {
+        newState = {
+          ...newState,
+          ...{ initialValues: init },
+          fields: Object.fromEntries(
+            // @ts-ignore
+            Object.entries(newState.fields).map(([name, value]) => [
+              name,
+              { ...value, value: init[name] },
+            ]),
+          ),
+        }
+      })
       onAction('blur', (name) => {
         mergeFieldByName(name, { touched: true })
       })
-      onAction('change', ({ name, value }) => {
-        // @ts-ignore
-        executeValidate(name, newState.fields[name].validate, value)
-        mergeFieldByName(name, { value })
-      })
-
-      const invalid = Object.values(newState.fields).some(({ error }) => error)
+      const invalid = getInvalid()
       return {
         ...newState,
         valid: !invalid,
         invalid,
-        pristine: Object.entries(values).some(
-          ([name, value]) => state.fields[name].value !== value,
+        values: getValues(),
+        // @ts-ignore
+        pristine: Object.entries(newState.fields).every(
+          ([name, { value }]) => newState.initialValues[name] === value,
         ),
-        validating: Object.values(state.fields).some(
+        validating: Object.values(newState.fields).some(
           ({ validating }) => validating,
         ),
       }

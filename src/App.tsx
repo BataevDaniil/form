@@ -53,14 +53,19 @@ function App() {
         }}
         initialValues={{ field1: 'asdf' }}
       >
-        <Field name="field1" validate={required} component={Input} />
-        <Field
-          name="field2"
-          subscription={{ value: true }}
-          validate={(value) => delay(2000).then(() => required(value))}
-          component={Input}
-        />
-
+        {() => {
+          return (
+            <>
+              <Field name="field1" validate={required} component={Input} />
+              <Field
+                name="field2"
+                subscription={{ value: true }}
+                validate={(value) => delay(2000).then(() => required(value))}
+                component={Input}
+              />
+            </>
+          )
+        }}
         <Footer />
       </Form>
       <Form
@@ -70,17 +75,23 @@ function App() {
         }}
         initialValues={{ field2: 'asdf' }}
       >
-        <Field
-          name="field1"
-          subscription={{ value: true }}
-          validate={required}
-          component={Input}
-        />
-        <Field
-          name="field2"
-          validate={(value) => delay(2000).then(() => required(value))}
-          component={Input}
-        />
+        {() => {
+          return (
+            <>
+              <Field
+                name="field1"
+                subscription={{ value: true }}
+                validate={required}
+                component={Input}
+              />
+              <Field
+                name="field2"
+                validate={(value) => delay(2000).then(() => required(value))}
+                component={Input}
+              />
+            </>
+          )
+        }}
         <Footer />
       </Form>
     </>
