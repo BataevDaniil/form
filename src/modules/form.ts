@@ -93,13 +93,15 @@ export const createForm = ({ onSubmit, initialValues }: CreateFormParams) => {
 
       const getInvalid = () =>
         Object.values(newState.fields).some(({ error }) => error)
-      const getValues = () =>
-        Object.fromEntries(
+      const getValues = () => ({
+        ...newState.initialValues,
+        ...Object.fromEntries(
           Object.values(newState.fields).map(({ name, value }) => [
             name,
             value,
           ]),
-        )
+        ),
+      })
       //TODO: add merge all field
 
       const mergeFieldByName = (
@@ -147,13 +149,11 @@ export const createForm = ({ onSubmit, initialValues }: CreateFormParams) => {
         })
       }
       onAction('change', ({ name, value }) => {
-        console.log('change')
         mergeFieldByName(name, { value })
         executeValidate(name)
       })
 
-      onAction(`submit`, (callback) => {
-        console.log('submit')
+      onAction('submit', (callback) => {
         schedule(async (dispatch) => {
           const actions = [
             create('_mergeForm', {
@@ -164,10 +164,6 @@ export const createForm = ({ onSubmit, initialValues }: CreateFormParams) => {
             dispatch(
               create('_mergeForm', {
                 submitting: true,
-              }),
-            )
-            dispatch(
-              create('_mergeForm', {
                 fields: Object.fromEntries(
                   Object.entries(newState.fields).map(([name, value]) => [
                     name,
@@ -185,7 +181,7 @@ export const createForm = ({ onSubmit, initialValues }: CreateFormParams) => {
           }
         })
       })
-      onAction(`reset`, (name) => {
+      onAction('reset', (name) => {
         mergeFieldByName(name, {
           ...field,
           name,
@@ -193,13 +189,13 @@ export const createForm = ({ onSubmit, initialValues }: CreateFormParams) => {
           value: newState.initialValues?.[name],
         })
       })
-      onAction(`setConfig`, ({ name, config }) => {
+      onAction('setConfig', ({ name, config }) => {
         mergeFieldByName(name, config)
         if (config.validate) {
           executeValidate(name)
         }
       })
-      onAction(`addField`, (name) => {
+      onAction('addField', (name) => {
         mergeFieldByName(name, {
           ...field,
           name,

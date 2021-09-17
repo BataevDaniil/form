@@ -1,9 +1,7 @@
-import React, { ReactElement, ReactNode, useContext } from 'react'
-import { useAction, useAtom } from '@reatom/react'
 import { createAtom } from '@reatom/core'
+import { useAction, useAtom } from '@reatom/react'
 import deepEqual from 'deep-equal'
-
-import { memo } from './memo'
+import React, { ReactElement, ReactNode, useContext } from 'react'
 
 import {
   createForm,
@@ -14,6 +12,7 @@ import {
   FormState,
   mapFieldToMeta,
 } from './form'
+import { memo } from './memo'
 
 export type FieldInputProps<FieldValue> = {
   name: string
@@ -44,6 +43,7 @@ export const useForm = () => {
   const form = useContext(Context)
   return React.useMemo(
     () => ({
+      atom: form,
       submit: () =>
         new Promise<undefined>((resolve) =>
           form.submit.dispatch(() => resolve(undefined)),
@@ -189,7 +189,7 @@ export const Form: React.VFC<
       debug?: boolean
       createForm?: typeof createForm
       component?: React.FC
-      children: (
+      children?: (
         formState: FormState<any> & { form: ReturnType<typeof useForm> },
       ) => ReactElement
     }
