@@ -16,6 +16,7 @@ export type FieldState<FieldValue> = {
   error: string | null
   touched: boolean
   validating: boolean
+  destroyView: boolean
 }
 
 export type FormState<FormValues, InitialFormValues = Partial<FormValues>> = {
@@ -46,6 +47,7 @@ const field: FieldState<any> & FieldConfig = {
   touched: false,
   validate: null,
   validating: false,
+  destroyView: false,
 }
 // @ts-ignore
 const formInitial: FormState<any, any> &
@@ -67,6 +69,7 @@ export const mapFieldToMeta = (currentField) => ({
   error: currentField.error,
   validating: currentField.validating,
   touched: currentField.touched,
+  destroyView: currentField.destroyView,
 })
 
 export const createForm = ({ onSubmit, initialValues }: CreateFormParams) => {
@@ -80,6 +83,8 @@ export const createForm = ({ onSubmit, initialValues }: CreateFormParams) => {
       focus: (name: string) => name,
       change: (name: string, value: any) => ({ name, value }),
       addField: (name: string) => name,
+      destroyView: (name: string) => name,
+      createView: (name: string) => name,
       setConfig: (name: string, config: FieldConfig) => ({ name, config }),
       setConfigForm: (name: string, config: FormConfig) => ({ name, config }),
       _mergeField: (name: string, newField: Partial<FieldState<any>>) => ({
@@ -92,7 +97,9 @@ export const createForm = ({ onSubmit, initialValues }: CreateFormParams) => {
       let newState = state
 
       const getInvalid = () =>
-        Object.values(newState.fields).some(({ error }) => error)
+        Object.values(newState.fields).some(({ error, destroyView }) =>
+          destroyView ? false : error,
+        )
       const getValues = () => ({
         ...newState.initialValues,
         ...Object.fromEntries(
@@ -196,11 +203,13 @@ export const createForm = ({ onSubmit, initialValues }: CreateFormParams) => {
         }
       })
       onAction('addField', (name) => {
+        const existField = Boolean(newState.fields[name])
         mergeFieldByName(name, {
-          ...field,
+          ...(existField ? newState.fields[name] : field),
           name,
           // @ts-ignore
           value: newState.initialValues?.[name],
+          destroyView: false,
         })
       })
       onAction('_mergeField', ({ name, newField }) => {
@@ -227,6 +236,12 @@ export const createForm = ({ onSubmit, initialValues }: CreateFormParams) => {
       })
       onAction('blur', (name) => {
         mergeFieldByName(name, { touched: true })
+      })
+      onAction('destroyView', (name) => {
+        mergeFieldByName(name, { destroyView: true })
+      })
+      onAction('createView', (name) => {
+        mergeFieldByName(name, { destroyView: false })
       })
       const invalid = getInvalid()
       return {

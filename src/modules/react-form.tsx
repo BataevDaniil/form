@@ -1,6 +1,5 @@
 import { createAtom } from '@reatom/core'
 import { useAction, useAtom } from '@reatom/react'
-import deepEqual from 'deep-equal'
 import React, { ReactElement, ReactNode, useContext } from 'react'
 
 import {
@@ -12,7 +11,7 @@ import {
   FormState,
   mapFieldToMeta,
 } from './form'
-import { memo } from './memo'
+import { memo, isShallowEqual } from './memo'
 
 export type FieldInputProps<FieldValue> = {
   name: string
@@ -133,6 +132,16 @@ export const useField = (
       form.setConfig.dispatch(name, config)
     }
   }
+  const destroyView = useAction(() => form.destroyView(name), [name])
+  const createView = useAction(() => form.createView(name), [name])
+  React.useEffect(() => {
+    if (form.getState().fields[name] !== undefined) {
+      createView()
+    }
+    return () => {
+      destroyView()
+    }
+  }, [destroyView, createView, name, form])
   const onBlur = useAction(() => form.blur(name), [name])
   const onFocus = useAction(() => form.focus(name), [name])
   const onChange = useAction((value: any) => form.change(name, value), [name])
@@ -144,23 +153,32 @@ export const useField = (
       },
       // @ts-ignore
       ({ onChange, get }, state = mapFormToField(get('form'), name)) => {
-        onChange('form', (newState, oldState) => {
+        let newState = state
+        onChange('form', (newStateForm, oldState) => {
           if (
             oldState === undefined ||
             !config?.subscription ||
             Object.keys(config.subscription).some(
               (prop) =>
                 //@ts-ignore
-                newState.fields[name][prop] !== oldState.fields[name][prop],
+                newStateForm.fields[name][prop] !== oldState.fields[name][prop],
             )
           ) {
-            state = mapFormToField(newState, name)
+            newState = mapFormToField(newStateForm, name)
           }
         })
 
-        return state
+        return newState
       },
-      { decorators: [memo(deepEqual)] },
+      {
+        decorators: [
+          memo((a, b) => {
+            return (
+              isShallowEqual(a.input, b.input) && isShallowEqual(a.meta, b.meta)
+            )
+          }),
+        ],
+      },
     )
   }, [form, name])
 
@@ -175,7 +193,7 @@ export const useField = (
         onChange,
       },
     }),
-    [state, onChange, onFocus, onFocus],
+    [state, onBlur, onFocus, onChange],
   )
 }
 
